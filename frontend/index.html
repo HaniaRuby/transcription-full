@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Transcription</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    h2 { color: #333; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+    pre { background-color: #f0f0f0; padding: 20px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Speak and Get Live Transcription</h2>
+  <button id="start" onclick="start()">Start Recording</button>
+  <button id="stop" onclick="stop()" disabled>Stop Recording</button>
+  <pre id="output">Waiting for speech...</pre>
+
+<script>
+// Declare these variables in the global scope so they're accessible to the functions
+let mediaRecorder;
+let ws;
+let intervalId;
+
+function start() {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+        console.log("Microphone access granted");
+        const audioCtx = new AudioContext({ sampleRate: 16000 });
+        const source = audioCtx.createMediaStreamSource(stream);
+        const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        const buffer = [];
+
+        // WebSocket connection to the backend
+        ws = new WebSocket("ws://192.168.1.42:8000/ws/transcribe");
+
+        // When the WebSocket is open, we can start processing audio
+        ws.onopen = () => {
+            console.log("WebSocket connected!");
+        };
+
+        ws.onmessage = (event) => {
+            document.getElementById("output").textContent += event.data + " ";
+        };
+
+        ws.onerror = (error) => {
+            console.error("WebSocket error: ", error);
+        };
+
+        processor.onaudioprocess = (e) => {
+            const floatData = e.inputBuffer.getChannelData(0);
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(new Float32Array(floatData).buffer);
+            } else {
+                console.log("WebSocket not open. Cannot send data.");
+            }
+        };
+
+        source.connect(processor);
+        processor.connect(audioCtx.destination);
+
+        mediaRecorder = { stream, processor, source, audioCtx };
+    }).catch(error => {
+        console.error('Error accessing the microphone:', error);
+        alert('Error accessing the microphone. Please check your microphone settings.');
+    });
+
+    // Change button states
+    document.getElementById("start").disabled = true;
+    document.getElementById("stop").disabled = false;
+}
+
+function stop() {
+    if (mediaRecorder) {
+        mediaRecorder.processor.disconnect();
+        mediaRecorder.source.disconnect();
+        mediaRecorder.audioCtx.close();
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+
+        // Close WebSocket after stopping the recording
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.close();
+            console.log("WebSocket closed.");
+        }
+
+        // Change button states
+        document.getElementById("start").disabled = false;
+        document.getElementById("stop").disabled = true;
+        document.getElementById("output").textContent += "\nRecording stopped.";
+    } else {
+        console.error("Media recorder was not initialized.");
+    }
+}
+
+// Wait until the DOM is fully loaded before enabling buttons and attaching events
+document.addEventListener("DOMContentLoaded", function () {
+    // You can now safely add event listeners if needed, but functions are already globally accessible
+});
+</script>
+
+</body>
+</html>

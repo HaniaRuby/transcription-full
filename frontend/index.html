@@ -31,7 +31,7 @@ function start() {
         const buffer = [];
 
         // WebSocket connection to the backend
-        ws = new WebSocket("ws://192.168.1.42:8000/ws/transcribe");
+        ws = new WebSocket("ws://192.168.1.1:8000/ws/transcribe");
 
         // When the WebSocket is open, we can start processing audio
         ws.onopen = () => {
